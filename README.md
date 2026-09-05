@@ -48,7 +48,7 @@ for_window [app_id="swov"] floating enable, border none
 | `d` | open the launcher (`swas`) and step aside |
 | `x`, `del` | close marked or selected windows, `enter` confirms |
 | middle click | close that window straight away |
-| `f` | find windows by app id, title or workspace name, highlighting the hits |
+| `f` | find windows by app id, title or workspace name, highlighting the hits; nothing is selected while nothing matches |
 | `/` | filter: same search, but hides everything else |
 | `r` | reload |
 | `esc` | cancel a drag, else quit |

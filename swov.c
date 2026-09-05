@@ -3525,6 +3525,11 @@ static void apply_filter(void)
             int v = ws_first_visible_match(&WSS[i]);
             if (v >= 0) { sel_ws = i; WSS[i].sel = v; sel_active = true; return; }
         }
+        /* Nothing matched. Leaving the previous selection lit says something
+         * was found and points at the wrong thing; enter would then act on
+         * it. Nothing is selected until the query matches again. */
+        for (int i = 0; i < NWS; ++i) WSS[i].sel = -1;
+        sel_active = false;
     } else {
         select_ws(sel_ws, true);
     }
@@ -4656,13 +4661,26 @@ static void draw_workspace(int idx)
         stroke_round_rect(box, C.radius * SC * 0.7f, SDL_max(1.0f, 1.6f * SC),
                           with_alpha(C.accent, 0.5f));
 
-        if (WINS[ws->first + i].has_tab) {       /* the strip the tabs sit on */
-            SDL_FRect strip = xf(WINS[ws->first + i].tab);
-            strip.x = box.x;
-            strip.w = box.w;
-            strip.y -= e * 0.5f;
-            strip.h += e;
-            fill_round_rect(strip, C.radius * SC * 0.5f, with_alpha(C.mini_bg, 0.8f));
+        if (WINS[ws->first + i].has_tab) {
+            /* The strip the tabs sit on, exactly as wide as the tabs. It used
+             * to span the group's whole box, which left a dark band sticking
+             * out either side of the tabs once they were inset — the shadow
+             * that looked like the background bleeding over the edges. */
+            float x0 = 1e9f, x1 = -1e9f, ty = 0.0f, th = 0.0f;
+            for (int j = 0; j < ws->count; ++j) {
+                Win *tw = &WINS[ws->first + j];
+                if (tw->group != i || !tw->has_tab) continue;
+                SDL_FRect t = xf(tw->tab);
+                if (t.x < x0) x0 = t.x;
+                if (t.x + t.w > x1) x1 = t.x + t.w;
+                ty = t.y; th = t.h;
+            }
+            if (x1 > x0) {
+                SDL_FRect strip = { x0 - e * 0.5f, ty - e * 0.5f,
+                                    x1 - x0 + e, th + e };
+                fill_round_rect(strip, C.radius * SC * 0.5f,
+                                with_alpha(C.mini_bg, 0.8f));
+            }
         }
     }
 
