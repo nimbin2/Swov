@@ -38,7 +38,7 @@ for_window [app_id="swov"] floating enable, border none
 | `0`–`9` | switch to that workspace |
 | `ctrl+0`–`9` | move the selection there |
 | arrows, `hjkl` | move the selection; it walks through tile borders and wraps around the grid |
-| `tab` / `shift+tab` | previous / next workspace; while searching, only the ones with a hit |
+| `tab` / `shift+tab` | the app you were in before this one, then the one before that (`tab=workspace` walks workspaces instead) |
 | `ctrl+tab` (`+shift`) | one row down / up in the grid |
 | `w` | window selection ⇄ whole-workspace selection |
 | `enter`, click | focus |
@@ -278,6 +278,19 @@ overlay that is not on the layer shell cannot be drawn over it. swov takes it
 off fullscreen while it is up and puts it back exactly as it was on the way
 out. `over_fullscreen=0` leaves it alone, and swov opens behind it.
 
+## Last used
+
+`tab=recent` (the default) makes tab walk windows in the order they were last
+focused, so one press lands on what you were in before this — what the key
+means everywhere else. `shift+tab` goes the other way, and `ctrl+tab` still
+moves a row in the grid.
+
+swov opens and closes in a moment, so it cannot watch focus itself. swbr is
+running all day and does: it keeps the last thirty-two windows in
+`$XDG_RUNTIME_DIR/swbr-focus`, most recent first, and swov reads that when it
+starts. Without swbr there is no order to walk, so tab quietly falls back to
+stepping through workspaces — which is also what `tab=workspace` does.
+
 ## Workspace usage
 
 Every switch goes through swov, so it stamps the time as it goes: the workspace
@@ -360,6 +373,7 @@ lists them. The file above is read after it, so swov's own config always wins.
 | `over_fullscreen` | un-fullscreen whatever is in the way, and restore it on exit |
 | `map_dwell_ms` | hold a drag over a monitor this long to switch to it; `0` is off |
 | `launcher` | what `d` opens; `swas --replace overview=1` by default |
+| `tab` | `recent` walks the last used apps, `workspace` walks workspaces |
 | `cancel_drop` | the ✕ beside the monitor map: let a drag go there and nothing happens |
 | `track`, `usage_dots`, `dot_count`, `dot_px` | usage recording and its dot scale |
 | `start_selection` | `workspace`, `none` or `window` |

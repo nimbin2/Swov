@@ -44,6 +44,9 @@ outputs_map=1      # with a second screen: a map of the monitors, bottom left,
                    # workspaces. It keeps that place to itself, so it is
                    # always in the same spot
 outputs_map_w=0.18 # how wide, as a share of the tile area
+tab=recent         # what tab walks: recent = the apps you used last, in that
+                   # order (needs swbr running, which is what keeps the
+                   # order). workspace = previous/next workspace
 launcher=swas --replace overview=1
                    # what `d` opens. swas draws its own backdrop, so swov
                    # steps aside rather than stacking two overlays

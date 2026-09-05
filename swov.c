@@ -250,6 +250,7 @@ typedef struct {
     char  output[64];        /* start looking at this screen, not the one
                                 sway is on                                   */
     char  launcher[192];     /* what `d` opens, and swov steps aside for     */
+    char  tab[16];           /* what tab walks: workspaces, or last used     */
     int   show_header;
     int   show_hints;
     int   quit_on_focus_loss;
@@ -315,6 +316,7 @@ static Cfg cfg_defaults(void)
     c.outputs_map_w      = 0.18f;
     c.map_dwell_ms       = 0;
     str_set(c.launcher, sizeof(c.launcher), "swas --replace overview=1");
+    str_set(c.tab, sizeof(c.tab), "recent");
     c.show_header        = 1;
     c.show_hints         = 1;
     c.quit_on_focus_loss = 1;
@@ -411,6 +413,7 @@ static void cfg_set(Cfg *c, const char *k, const char *v)
     else if (key_is(k,"map_dwell_ms"))  c->map_dwell_ms = atoi(v);
     else if (key_is(k,"output"))        str_set(c->output, sizeof(c->output), v);
     else if (key_is(k,"launcher"))      str_set(c->launcher, sizeof(c->launcher), v);
+    else if (key_is(k,"tab"))           str_set(c->tab, sizeof(c->tab), v);
     else if (key_is(k,"show_header"))   c->show_header = atoi(v) != 0;
     else if (key_is(k,"show_hints"))    c->show_hints = atoi(v) != 0;
     else if (key_is(k,"quit_on_focus_loss")) c->quit_on_focus_loss = atoi(v) != 0;
@@ -3345,6 +3348,75 @@ static bool ws_is_hit(const Ws *ws)
     return ws_first_visible_match(ws) >= 0;
 }
 
+/* The focus order swbr keeps, most recent first. swov opens and closes in a
+ * moment, so it can never watch focus itself; swbr is running all day and
+ * leaves the list where this can pick it up. */
+static int  FOCUS[32];
+static int  NFOCUS;
+
+static void focus_load(void)
+{
+    NFOCUS = 0;
+    const char *rt = getenv("XDG_RUNTIME_DIR");
+    if (!rt || !*rt) return;
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/swbr-focus", rt);
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    char line[64];
+    while (NFOCUS < (int)SDL_arraysize(FOCUS) && fgets(line, sizeof(line), f)) {
+        int id = atoi(line);
+        if (id > 0) FOCUS[NFOCUS++] = id;
+    }
+    fclose(f);
+}
+
+/* where a window sits in that order, or a big number if it is not in it */
+static int focus_rank(int con_id)
+{
+    for (int i = 0; i < NFOCUS; ++i) if (FOCUS[i] == con_id) return i;
+    return 1000;
+}
+
+/* Tab through windows in the order they were last used, rather than through
+ * workspaces. The first press lands on the one you were in before this one —
+ * which is what the key means everywhere else — and holding shift walks back.
+ * Returns false when there is no order to walk, so tab falls back to
+ * workspaces rather than doing nothing. */
+static bool step_recent(int dir)
+{
+    if (NFOCUS == 0 || NWIN == 0) return false;
+
+    /* every window we can see, in the order they were last focused */
+    int order[MAX_WINDOWS], n = 0;
+    for (int i = 0; i < NWIN && n < (int)SDL_arraysize(order); ++i)
+        if (win_visible(&WINS[i]) && !WINS[i].is_self) order[n++] = i;
+    if (n == 0) return false;
+
+    for (int i = 1; i < n; ++i)                    /* small n, plain sort */
+        for (int j = i; j > 0 &&
+             focus_rank(WINS[order[j]].con_id) < focus_rank(WINS[order[j-1]].con_id); --j) {
+            int t = order[j]; order[j] = order[j-1]; order[j-1] = t;
+        }
+
+    int at = -1;
+    Win *cur = NWS > 0 ? ws_sel_win(&WSS[sel_ws]) : NULL;
+    for (int i = 0; i < n; ++i)
+        if (cur ? (&WINS[order[i]] == cur) : WINS[order[i]].focused) { at = i; break; }
+
+    int next = at < 0 ? 0 : (at + dir + n) % n;
+    if (at < 0 && dir < 0) next = n - 1;
+
+    Win *w = &WINS[order[next]];
+    if (w->ws < 0 || w->ws >= NWS) return false;
+    sel_ws = w->ws;
+    sel_active = true;
+    WSS[sel_ws].sel = (int)(w - &WINS[WSS[sel_ws].first]);
+    dirty = true;
+    return true;
+}
+
 static void step_ws(int dir)
 {
     for (int i = 1; i <= NWS; ++i) {
@@ -5027,6 +5099,7 @@ static void reload_model(void)
     }
 
     cpu_load();                  /* whatever swbr last measured */
+    focus_load();                /* and the order things were used in */
     mark("cpu numbers");
     if (!FS_RESTORE) fullscreen_step_aside();
     layout();
@@ -5598,8 +5671,9 @@ static void handle_key(const SDL_KeyboardEvent *k)
         break;
 
     case SDLK_TAB:
-        if (k->mod & SDL_KMOD_CTRL) step_ws_row(shift ? -1 : 1);
-        else                        step_ws(shift ? -1 : 1);
+        if (k->mod & SDL_KMOD_CTRL)      step_ws_row(shift ? -1 : 1);
+        else if (!strcmp(C.tab, "recent") && step_recent(shift ? -1 : 1)) break;
+        else                             step_ws(shift ? -1 : 1);
         break;
 
     case SDLK_D:                                   /* the launcher, in front */
